@@ -17,7 +17,8 @@ from datetime import datetime, timezone, timedelta
 tz = timezone(timedelta(hours=8))
 app = FastAPI()
 running = False
-voice_talking = True
+voice_talking = False
+voice_recording = False
 video = False
 
 app.add_middleware(
@@ -50,6 +51,16 @@ def stop_voice():
     stop_talking()
     return "不过滤连麦单"
 
+@app.get("/record_start")
+def start_record():
+    start_recording()
+    return "过滤文语单"
+
+@app.get("/record_stop")
+def stop_record():
+    stop_recording()
+    return "不过滤文语单"
+
 @app.get("/only_video")
 def video_now():
     only_video()
@@ -68,6 +79,14 @@ def check():
      return "过滤连麦中"
     else:
      return "未过滤连麦"
+
+
+@app.get("/check_recording")
+def check():
+    if voice_recording:
+     return "过滤文语中"
+    else:
+     return "未过滤文语"
 
 # @app.get("/items/{item_id}")
 # def read_item(item_id: int, q: Union[str, None] = None):
@@ -166,6 +185,9 @@ def extract_order_id(decrypted_json_str):
             if voice_talking and any(keyword in name for keyword in ['连麦'] for name in names):
                 log("[跳过订单] 不要连麦单")
                 continue
+            if voice_recording and any(keyword in name for keyword in ['文字语音'] for name in names):
+                log("[跳过订单] 不要文语单")
+                continue
             if any(keyword in name for keyword in ['游戏'] for name in names):
                 log("[跳过订单] 不要游戏单")
                 continue
@@ -214,10 +236,12 @@ def run_loop(interval):
 
 # ========== 控制函数 ==========
 def start_grabbing():
-    global running,video,voice_talking
-    voice_talking = True
+    global running,video,voice_talking,voice_recording
+    voice_talking = False
+    voice_recording = False
     video = False
     print('voice_talking: ', voice_talking)
+    print('voice_recording: ', voice_recording)
     print('video: ', video)
     if running:
         return
@@ -241,6 +265,16 @@ def start_talking():
     global voice_talking
     voice_talking = True
     log("[过滤连麦单.]")
+
+def start_recording():
+    global voice_recording
+    voice_recording = True
+    log("[过滤文语单.]")
+
+def stop_recording():
+    global voice_recording
+    voice_recording = False
+    log("[不过滤文语单.]")
 
 
 def stop_talking():
