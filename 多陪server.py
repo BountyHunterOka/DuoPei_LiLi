@@ -19,6 +19,7 @@ app = FastAPI()
 running = False
 voice_talking = False
 voice_recording = False
+amount_filter = False
 video = False
 
 app.add_middleware(
@@ -60,6 +61,16 @@ def start_record():
 def stop_record():
     stop_recording()
     return "不过滤文语单"
+
+@app.get("/amount_start")
+def start_amount():
+    start_amount_now()
+    return "过滤金额"
+
+@app.get("/amount_stop")
+def stop_amount():
+    stop_amount_now()
+    return "不过滤金额"
 
 @app.get("/only_video")
 def video_now():
@@ -171,10 +182,10 @@ def extract_order_id(decrypted_json_str):
             # if any(word in memo for word in sensitive_words):
             #     log("[跳过订单] 包含用户定义的敏感词")
             #     continue
-            # amount = order_list[0].get("totalAmount")
-            # if amount < 1500:
-            #     log('价格低于15，自动过滤')
-            #     continue
+            amount = order.get("totalAmount")
+            if amount_filter and amount <= 2000:
+                log('价格低于20，自动过滤')
+                continue
             if order.get("userMemo"):
                 log("[跳过订单] 有备注")
                 continue
@@ -270,6 +281,11 @@ def start_recording():
     voice_recording = True
     log("[过滤文语单.]")
 
+def start_amount_now():
+    global amount_filter
+    amount_filter = True
+    log("[过滤金额.]")
+
 def stop_recording():
     global voice_recording
     voice_recording = False
@@ -280,6 +296,14 @@ def stop_talking():
     global voice_talking
     voice_talking = False
     log("[不过滤连麦单.]")
+
+
+def stop_amount_now():
+    global amount_filter
+    amount_filter = False
+    log("[不过滤金额.]")
+
+
 
 def only_video():
     global video
