@@ -190,10 +190,12 @@ def extract_order_id(decrypted_json_str):
                 log("[跳过订单] 有备注")
                 continue
             names = order.get("item", {}).get("names", [])
+            itemCategory = order.get("itemCategory", {}).get("name", [])
+            
             # if video and '视频通话' not in names:
             #     log("[跳过订单] 只要视频单")
             #     continue
-            if any(keyword in name for keyword in ['体验'] for name in names):
+            if any(keyword in itemCategory for keyword in ['体验']):
                 log("[跳过订单] 不要体验单")
                 continue
             if voice_talking and any(keyword in name for keyword in ['连麦'] for name in names):
