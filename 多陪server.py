@@ -119,6 +119,10 @@ def check():
 # ========== 常量 ==========
 KEY_HEX = "81b120ef00216c33b266763abb02e6d1"
 IV_HEX = "e6a4cc0507dfe344b042289eeb945dce"
+# randomList 新协议；get/confirm 先旧密钥，失败再试新密钥
+NEW_KEY_HEX = "faf6bcb4eeaa8aa62154ed3b8c14cf5bce08cdf83086b9188abdca6f2c8bcbb1"
+NEW_IV_HEX = "d45df726d59d21fac023cdad3dfcea86"
+DUOPEI_API_VERSION = "202501071"
 
 HEADERS = {
     "platform": "app",
@@ -142,6 +146,9 @@ session.headers.update(HEADERS)
 def log(text):
     print(text)
 
+def order_headers():
+    return {"api-version": DUOPEI_API_VERSION}
+
 # ========== AES 解密 ==========
 def decrypt_aes_cbc(encrypted_b64, key_hex, iv_hex):
     try:
@@ -155,16 +162,23 @@ def decrypt_aes_cbc(encrypted_b64, key_hex, iv_hex):
         log(f"[解密失败] {e}")
         return None
 
+def decrypt_order_body(encrypted_b64):
+    """订单 get/confirm：先旧密钥，失败再试新 AES。"""
+    raw = decrypt_aes_cbc(encrypted_b64, KEY_HEX, IV_HEX)
+    if raw is not None:
+        return raw
+    return decrypt_aes_cbc(encrypted_b64, NEW_KEY_HEX, NEW_IV_HEX)
+
 # ========== 刷新订单列表 ==========
 def refresh_list():
     url = f"{BASE_URL}/s/c/order/randomList"
     params = {"pageNo": 1, "pageSize": 20}
     try:
-        resp = session.get(url, params=params, timeout=3.5)
+        resp = session.get(url, params=params, headers=order_headers(), timeout=3.5)
         resp.raise_for_status()
         data = resp.json()
         if data.get("isEncrypted"):
-            return decrypt_aes_cbc(data["response"], KEY_HEX, IV_HEX)
+            return decrypt_aes_cbc(data["response"], NEW_KEY_HEX, NEW_IV_HEX)
         return json.dumps(data)
     except Exception as e:
         log(f"[刷新失败] {e}")
@@ -212,15 +226,32 @@ def extract_order_id(decrypted_json_str):
         log(f"[提取订单 ID 失败] {e}")
     return None
 
+def get_order(order_id):
+    """订单详情；带 api-version，解密旧密钥优先、失败再试新 AES。"""
+    url = f"{BASE_URL}/s/c/order/get"
+    try:
+        resp = session.get(url, params={"id": order_id}, headers=order_headers(), timeout=3.5)
+        da = resp.json()
+        if da.get("isEncrypted") and da.get("response"):
+            raw = decrypt_order_body(da["response"])
+            if raw is None:
+                log(f"[订单详情解密失败] order={order_id}")
+                return None
+            return raw
+        return da
+    except Exception as e:
+        log(f"[订单详情异常] order={order_id}: {e}")
+        return None
+
 def confirm_order(order_id):
     url = f"{BASE_URL}/s/c/order/confirm"
     data = {"id": order_id}
     try:
         while running:
             # time.sleep(6.1)
-            resp = session.post(url, data=data, timeout=3.5)
+            resp = session.post(url, data=data, headers=order_headers(), timeout=3.5)
             da = resp.json()
-            confirm_rep = decrypt_aes_cbc(da["response"], KEY_HEX, IV_HEX)
+            confirm_rep = decrypt_order_body(da["response"])
             if not confirm_rep:
                 break
             log(f"[抢单结果] {confirm_rep}")
@@ -241,7 +272,12 @@ def run_loop(interval):
             if order_id:
                 # create_ts = extract_ts(decrypted)
                 log(f"[发现订单] ID = {order_id}")
+                get_order(order_id)
+                time.sleep(3)
+                if not running:
+                    break
                 confirm_order(order_id)
+                get_order(order_id)
                 # play_sound()
             else:
                 log("[无新订单]")
