@@ -273,7 +273,7 @@ def run_loop(interval):
                 # create_ts = extract_ts(decrypted)
                 log(f"[发现订单] ID = {order_id}")
                 get_order(order_id)
-                time.sleep(3)
+                time.sleep(2.7)
                 if not running:
                     break
                 confirm_order(order_id)
